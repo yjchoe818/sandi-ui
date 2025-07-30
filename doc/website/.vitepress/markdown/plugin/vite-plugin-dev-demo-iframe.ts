@@ -2,6 +2,8 @@ import type { Plugin, ViteDevServer } from 'vite';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { genHtml } from './genIframe';
+import rateLimit from 'express-rate-limit'; // Import rate limiting middleware
+import sanitizeHtml from 'sanitize-html'; // Import HTML sanitizer
 
 export default function demoIframe(): Plugin {
   return {
@@ -12,7 +14,13 @@ export default function demoIframe(): Plugin {
     //   rawConfig.build.rollupOptions.input['-demos_abc'] = '/Users/xxx/xx/abc.html';
     // },
     configureServer(server: ViteDevServer) {
+      const limiter = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 100 // limit each IP to 100 requests per windowMs
+      });
+
       return () => {
+        server.middlewares.use(limiter); // Apply rate limiting middleware
         server.middlewares.use(async (req, res, next) => {
           // console.log('req', req.url);
           // if not demo html, next it.
@@ -32,7 +40,7 @@ export default function demoIframe(): Plugin {
             // todo support html file
             let content = genHtml(meta);
             content = await server.transformIndexHtml?.(req.url, content, req.originalUrl);
-            res.end(content);
+            res.end(sanitizeHtml(content)); // Sanitize the HTML content
           } else {
             await next();
           }
